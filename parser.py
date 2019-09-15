@@ -43,10 +43,9 @@ class ConfigParser:
 
     def _build_dependencies(self, unique_tasks):
         grouped = self._group_tasks_by_group_and_taskname(unique_tasks)
-        task_to_dependent_task = dict()
+        task_to_dependent_task = defaultdict(set)
         for analyzed_task in unique_tasks:
             deps = self.config[analyzed_task.group]['tasks'][analyzed_task.name].get('dependencies')
-
             if deps:
                 for dep_group_name, dep_task_names in deps.items():
                     if not dep_task_names:
@@ -66,7 +65,7 @@ class ConfigParser:
                                                            f'task "{dep_task}" in dependencies.')
                             dep_tasks.add(dep_task)
                         dep_tasks.discard(analyzed_task)
-                    task_to_dependent_task[analyzed_task] = dep_tasks
+                    task_to_dependent_task[analyzed_task].update(dep_tasks)
 
         return task_to_dependent_task
 
@@ -76,4 +75,6 @@ if __name__ == '__main__':
     deps = parser.get_dependencies()
     from pprint import pprint as pp
 
-    pp((deps))
+    # task = Task('start', 'end_group', 'sleep 0')
+    # pp(deps[task])
+    pp(deps)
