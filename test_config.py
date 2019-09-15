@@ -97,7 +97,7 @@ config = {
             'end': {
                 'cmd': 'sleep 0',
                 'dependencies': {
-                    'group2': None
+                    'group3': None
                 }
             }
         }
