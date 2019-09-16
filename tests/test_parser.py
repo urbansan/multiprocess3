@@ -1,5 +1,5 @@
 import unittest
-from multiprocess3.test_config import config
+from multiprocess3.tests.test_config import config
 from multiprocess3.parser import ConfigParser
 from multiprocess3.task import Task
 

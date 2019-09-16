@@ -10,16 +10,16 @@ class ValidationError(Exception):
 class ConfigParser:
     def __init__(self, config):
         self._config = config
+        self._unique_tasks = self._build_tasks()
+        self._grouped = self._group_tasks_by_group_and_taskname()
+
+    @property
+    def unique_tasks(self):
+        return self._unique_tasks
 
     @property
     def config(self):
         return self._config
-
-    def get_dependencies(self):
-
-        unique_tasks = self._build_tasks()
-        tasks_to_dependencies = self._build_dependencies(unique_tasks)
-        return tasks_to_dependencies
 
     def _build_tasks(self):
         unique_tasks = set()
@@ -28,49 +28,67 @@ class ConfigParser:
                 task = Task(task_name,
                             group_name,
                             task_config['cmd'])
-
                 if task in unique_tasks:
                     raise ValidationError('There are 2 Task objects with identical signature: {task}')
                 else:
                     unique_tasks.add(task)
         return unique_tasks
 
-    def _group_tasks_by_group_and_taskname(self, unique_tasks: Set[Task]):
+    def _group_tasks_by_group_and_taskname(self):
         grouping = defaultdict(dict)
-        for task in unique_tasks:
+        for task in self.unique_tasks:
             grouping[task.group][task.name] = task
         return grouping
 
-    def _build_dependencies(self, unique_tasks):
-        grouped = self._group_tasks_by_group_and_taskname(unique_tasks)
+    def get_dependencies(self):
         task_to_dependent_task = defaultdict(set)
-        for analyzed_task in unique_tasks:
-            deps = self.config[analyzed_task.group]['tasks'][analyzed_task.name].get('dependencies')
-            if deps:
-                for dep_group_name, dep_task_names in deps.items():
-                    if not dep_task_names:
-                        try:
-                            dep_tasks = grouped[dep_group_name].values()
-                            dep_tasks = set(dep_tasks)
-                            dep_tasks.discard(analyzed_task)
-                        except KeyError:
-                            raise ValidationError(f'Invalid group in dependencies: "{dep_group_name}"')
-                    else:
-                        dep_tasks = set()
-                        for dep_task in dep_task_names:
-                            try:
-                                dep_task = grouped[dep_group_name][dep_task]
-                            except KeyError:
-                                raise ValidationError(f'Invalid group "{dep_group_name}" and/or '
-                                                           f'task "{dep_task}" in dependencies.')
-                            dep_tasks.add(dep_task)
-                        dep_tasks.discard(analyzed_task)
-                    task_to_dependent_task[analyzed_task].update(dep_tasks)
-
+        for analyzed_task in self.unique_tasks:
+            config_deps = self.config[analyzed_task.group]['tasks'] \
+                                     [analyzed_task.name].get('dependencies')
+            if config_deps:
+                dependent_tasks = self._parse_config_dependencies(config_deps)
+                dependent_tasks.discard(analyzed_task)
+                task_to_dependent_task[analyzed_task].update(dependent_tasks)
         return task_to_dependent_task
 
+    def _parse_config_dependencies(self, deps):
+        all_tasks = set()
+        for dep_group_name, dep_task_names in deps.items():
+            tasks = self._parse_config_dependency_line(dep_group_name, dep_task_names)
+            all_tasks.update(tasks)
+        return all_tasks
+
+    def _parse_config_dependency_line(self, group, task_names):
+        if not task_names:
+            dep_tasks = self._get_all_tasks_from_group(group)
+        else:
+            dep_tasks = self._get_selected_tasks_from_group(group, task_names)
+        return dep_tasks
+
+    def _get_selected_tasks_from_group(self, group, task_names):
+        dep_tasks = set()
+        for dep_task in task_names:
+            try:
+                dep_task = self._grouped[group][dep_task]
+            except KeyError:
+                raise ValidationError(f'Invalid group "{group}" and/or '
+                                      f'task "{dep_task}" in dependencies.')
+            dep_tasks.add(dep_task)
+
+        return dep_tasks
+
+    def _get_all_tasks_from_group(self, group):
+        try:
+            dep_tasks = self._grouped[group].values()
+            dep_tasks = set(dep_tasks)
+        except KeyError:
+            raise ValidationError(f'Invalid group in dependencies: "{group}"')
+
+        return dep_tasks
+
+
 if __name__ == '__main__':
-    from multiprocess3.test_config import config
+    from tests.test_config import config
     parser = ConfigParser(config)
     deps = parser.get_dependencies()
     from pprint import pprint as pp

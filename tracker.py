@@ -29,5 +29,5 @@ class DependencyTracker:
 
 
 if __name__ == '__main__':
-    from multiprocess3.test_config import config
+    from tests.test_config import config
     d = DependencyTracker(config)
