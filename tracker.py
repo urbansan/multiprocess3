@@ -1,4 +1,5 @@
 from multiprocess3.parser import ConfigParser
+from multiprocess3.task import Task
 
 
 

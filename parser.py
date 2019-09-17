@@ -1,10 +1,8 @@
 from collections import defaultdict
+
+from exceptions import ValidationError
 from multiprocess3.task import Task
-from typing import Set
-
-
-class ValidationError(Exception):
-    pass
+from multiprocess3.validator import DependencyValidator
 
 
 class ConfigParser:
@@ -21,6 +19,12 @@ class ConfigParser:
     def config(self):
         return self._config
 
+    def get_group_thread_count(self):
+        group_to_thread_count = dict()
+        for group, group_config in self.config.items():
+            group_to_thread_count[group] = group_config['number_of_parallel_threads']
+        return group_to_thread_count
+
     def _build_tasks(self):
         unique_tasks = set()
         for group_name, group_config in self.config.items():
@@ -29,7 +33,8 @@ class ConfigParser:
                             group_name,
                             task_config['cmd'])
                 if task in unique_tasks:
-                    raise ValidationError('There are 2 Task objects with identical signature: {task}')
+                    raise ValidationError('There are 2 Task objects with '
+                                          'identical signature: {task}')
                 else:
                     unique_tasks.add(task)
         return unique_tasks
@@ -41,15 +46,16 @@ class ConfigParser:
         return grouping
 
     def get_dependencies(self):
-        task_to_dependent_task = defaultdict(set)
+        task_to_predecessors = defaultdict(set)
         for analyzed_task in self.unique_tasks:
             config_deps = self.config[analyzed_task.group]['tasks'] \
                                      [analyzed_task.name].get('dependencies')
             if config_deps:
                 dependent_tasks = self._parse_config_dependencies(config_deps)
                 dependent_tasks.discard(analyzed_task)
-                task_to_dependent_task[analyzed_task].update(dependent_tasks)
-        return task_to_dependent_task
+                task_to_predecessors[analyzed_task].update(dependent_tasks)
+        self._validate_dependency_consistency(task_to_predecessors)
+        return task_to_predecessors
 
     def _parse_config_dependencies(self, deps):
         all_tasks = set()
@@ -85,6 +91,13 @@ class ConfigParser:
             raise ValidationError(f'Invalid group in dependencies: "{group}"')
 
         return dep_tasks
+
+    def _validate_dependency_consistency(self, task_deps):
+        validator = DependencyValidator(task_deps)
+        validator.search_for_cyclic_dependencies()
+        validator.search_for_deadlocks()
+
+
 
 
 if __name__ == '__main__':
